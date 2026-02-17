@@ -1,0 +1,44 @@
+%% Mermaid ER diagram for EventSeat (Milestone 1 scope)
+%% Save as eventseat-er.mmd. If you have Mermaid CLI installed, you can render:
+%% mmdc -i docs/er/eventseat-er.mmd -o docs/er/eventseat-er.png
+
+erDiagram
+  VENUES {
+    BIGINT id PK
+    VARCHAR name
+    VARCHAR address
+    VARCHAR city
+    VARCHAR timezone
+  }
+
+  EVENTS {
+    BIGINT id PK
+    BIGINT organizer_id
+    BIGINT venue_id FK
+    VARCHAR title
+    VARCHAR category
+    TIMESTAMP start_date_time
+    TIMESTAMP end_date_time
+    VARCHAR status
+  }
+
+  SEATS {
+    BIGINT id PK
+    BIGINT event_id FK
+    VARCHAR section
+    VARCHAR row_label
+    VARCHAR seat_number
+    DECIMAL base_price
+    CHAR(3) currency
+    VARCHAR status
+  }
+
+  %% Relationships
+  VENUES ||--o{ EVENTS : "has many events at"
+  EVENTS ||--o{ SEATS : "has many seats for"
+
+  %% Notes:
+  %% - organizer_id in EVENTS is a foreign key to users/organizers domain (not modeled in M1 tables)
+  %% - status fields:
+  %%   EVENTS.status: DRAFT | PUBLISHED | CANCELLED
+  %%   SEATS.status: AVAILABLE | HELD | SOLD
