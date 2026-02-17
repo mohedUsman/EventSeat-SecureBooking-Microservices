@@ -1,0 +1,130 @@
+package com.eventseat.catalog.repository;
+
+import com.eventseat.catalog.web.dto.SeatDto;
+import org.springframework.dao.EmptyResultDataAccessException;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.support.GeneratedKeyHolder;
+import org.springframework.jdbc.support.KeyHolder;
+import org.springframework.stereotype.Repository;
+
+import java.math.BigDecimal;
+import java.sql.PreparedStatement;
+import java.sql.Statement;
+import java.util.List;
+import java.util.Optional;
+
+@Repository
+public class SeatJdbcRepository {
+
+    private final JdbcTemplate jdbcTemplate;
+
+    public SeatJdbcRepository(JdbcTemplate jdbcTemplate) {
+        this.jdbcTemplate = jdbcTemplate;
+    }
+
+    public SeatDto save(SeatDto dto) {
+        final String sql = "INSERT INTO seats (event_id, section, row_label, seat_number, base_price, currency, status) "
+                +
+                "VALUES (?,?,?,?,?,?,?)";
+        KeyHolder keyHolder = new GeneratedKeyHolder();
+        jdbcTemplate.update(con -> {
+            PreparedStatement ps = con.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS);
+            ps.setLong(1, dto.getEventId());
+            ps.setString(2, dto.getSection());
+            ps.setString(3, dto.getRowLabel());
+            ps.setString(4, dto.getSeatNumber());
+            ps.setBigDecimal(5, dto.getBasePrice() == null ? BigDecimal.ZERO : dto.getBasePrice());
+            ps.setString(6, dto.getCurrency());
+            ps.setString(7, dto.getStatus());
+            return ps;
+        }, keyHolder);
+        Number key = keyHolder.getKey();
+        dto.setId(key != null ? key.longValue() : null);
+        return dto;
+    }
+
+    public int update(Long id, SeatDto dto) {
+        final String sql = "UPDATE seats SET event_id=?, section=?, row_label=?, seat_number=?, base_price=?, currency=?, status=? WHERE id=?";
+        return jdbcTemplate.update(sql,
+                dto.getEventId(),
+                dto.getSection(),
+                dto.getRowLabel(),
+                dto.getSeatNumber(),
+                dto.getBasePrice(),
+                dto.getCurrency(),
+                dto.getStatus(),
+                id);
+    }
+
+    public Optional<SeatDto> findById(Long id) {
+        final String sql = "SELECT id, event_id, section, row_label, seat_number, base_price, currency, status FROM seats WHERE id=?";
+        try {
+            SeatDto s = jdbcTemplate.queryForObject(sql, (rs, rowNum) -> {
+                SeatDto dto = new SeatDto();
+                dto.setId(rs.getLong("id"));
+                dto.setEventId(rs.getLong("event_id"));
+                dto.setSection(rs.getString("section"));
+                dto.setRowLabel(rs.getString("row_label"));
+                dto.setSeatNumber(rs.getString("seat_number"));
+                dto.setBasePrice(rs.getBigDecimal("base_price"));
+                dto.setCurrency(rs.getString("currency"));
+                dto.setStatus(rs.getString("status"));
+                return dto;
+            }, id);
+            return Optional.ofNullable(s);
+        } catch (EmptyResultDataAccessException e) {
+            return Optional.empty();
+        }
+    }
+
+    public List<SeatDto> findAll(int page, int size) {
+        final String sql = "SELECT id, event_id, section, row_label, seat_number, base_price, currency, status " +
+                "FROM seats ORDER BY id DESC LIMIT ? OFFSET ?";
+        int safeSize = Math.max(1, size);
+        int safePage = Math.max(0, page);
+        int offset = safePage * safeSize;
+        return jdbcTemplate.query(sql, (rs, rowNum) -> {
+            SeatDto dto = new SeatDto();
+            dto.setId(rs.getLong("id"));
+            dto.setEventId(rs.getLong("event_id"));
+            dto.setSection(rs.getString("section"));
+            dto.setRowLabel(rs.getString("row_label"));
+            dto.setSeatNumber(rs.getString("seat_number"));
+            dto.setBasePrice(rs.getBigDecimal("base_price"));
+            dto.setCurrency(rs.getString("currency"));
+            dto.setStatus(rs.getString("status"));
+            return dto;
+        }, safeSize, offset);
+    }
+
+    public List<SeatDto> findAllByEventId(Long eventId, int page, int size) {
+        final String sql = "SELECT id, event_id, section, row_label, seat_number, base_price, currency, status " +
+                "FROM seats WHERE event_id=? ORDER BY id DESC LIMIT ? OFFSET ?";
+        int safeSize = Math.max(1, size);
+        int safePage = Math.max(0, page);
+        int offset = safePage * safeSize;
+        return jdbcTemplate.query(sql, (rs, rowNum) -> {
+            SeatDto dto = new SeatDto();
+            dto.setId(rs.getLong("id"));
+            dto.setEventId(rs.getLong("event_id"));
+            dto.setSection(rs.getString("section"));
+            dto.setRowLabel(rs.getString("row_label"));
+            dto.setSeatNumber(rs.getString("seat_number"));
+            dto.setBasePrice(rs.getBigDecimal("base_price"));
+            dto.setCurrency(rs.getString("currency"));
+            dto.setStatus(rs.getString("status"));
+            return dto;
+        }, eventId, safeSize, offset);
+    }
+
+    public int delete(Long id) {
+        final String sql = "DELETE FROM seats WHERE id=?";
+        return jdbcTemplate.update(sql, id);
+    }
+
+    public boolean existsById(Long id) {
+        final String sql = "SELECT COUNT(1) FROM seats WHERE id=?";
+        Integer count = jdbcTemplate.queryForObject(sql, Integer.class, id);
+        return count != null && count > 0;
+    }
+}

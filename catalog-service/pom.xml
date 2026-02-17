@@ -36,6 +36,11 @@ client -->
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-actuator</artifactId>
         </dependency>
+        <!-- Security for temporary Basic auth in Milestone 1 -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-security</artifactId>
+        </dependency>
 
         <!-- JDBC + JPA (use JPA only for schema generation; CRUD via JdbcTemplate for M1) -->
         <dependency>
