@@ -110,6 +110,11 @@ public class EventJdbcRepository {
         }, safeSize, offset);
     }
 
+    public int publishIfDraft(Long id) {
+        final String sql = "UPDATE events SET status=? WHERE id=? AND status=?";
+        return jdbcTemplate.update(sql, "PUBLISHED", id, "DRAFT");
+    }
+
     public int delete(Long id) {
         final String sql = "DELETE FROM events WHERE id=?";
         return jdbcTemplate.update(sql, id);

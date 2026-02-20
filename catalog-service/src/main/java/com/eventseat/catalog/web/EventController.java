@@ -4,10 +4,15 @@ import com.eventseat.catalog.repository.EventJdbcRepository;
 import com.eventseat.catalog.repository.EventSearchRepository;
 import com.eventseat.catalog.web.dto.EventDto;
 import com.eventseat.catalog.web.dto.EventSearchItem;
+import com.eventseat.catalog.service.AuditService;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.oauth2.jwt.Jwt;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.server.ResponseStatusException;
 
 import jakarta.validation.Valid;
 import java.net.URI;
@@ -24,10 +29,12 @@ public class EventController {
 
     private final EventJdbcRepository repo;
     private final EventSearchRepository searchRepo;
+    private final AuditService auditService;
 
-    public EventController(EventJdbcRepository repo, EventSearchRepository searchRepo) {
+    public EventController(EventJdbcRepository repo, EventSearchRepository searchRepo, AuditService auditService) {
         this.repo = repo;
         this.searchRepo = searchRepo;
+        this.auditService = auditService;
     }
 
     @PostMapping
@@ -78,6 +85,32 @@ public class EventController {
         }
         repo.delete(id);
         return ResponseEntity.status(HttpStatus.NO_CONTENT).build();
+    }
+
+    @PatchMapping("/{id}/publish")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<EventDto> approvePublish(@PathVariable Long id, @AuthenticationPrincipal Jwt jwt) {
+        // First, ensure the event exists
+        var maybe = repo.findById(id);
+        if (maybe.isEmpty()) {
+            throw new ResourceNotFoundException("Event not found: " + id);
+        }
+        EventDto before = maybe.get();
+        // Try to publish if it is in DRAFT
+        int updated = repo.publishIfDraft(id);
+        if (updated == 0) {
+            // Not in DRAFT; return 409 Conflict with current state
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "Event is not in DRAFT state; current status=" + before.getStatus());
+        }
+        // Fetch updated entity
+        EventDto after = repo.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Event not found after publish: " + id));
+
+        // Audit
+        auditService.logEventPublishApproved(id, jwt);
+
+        return ResponseEntity.ok(after);
     }
 
     @GetMapping("/search")
