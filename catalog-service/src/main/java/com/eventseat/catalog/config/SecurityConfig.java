@@ -36,6 +36,8 @@ public class SecurityConfig {
                 http
                                 .csrf(csrf -> csrf.disable())
                                 .authorizeHttpRequests(auth -> auth
+                                                // Holds GET requires auth (owner/admin checked server-side)
+                                                .requestMatchers(HttpMethod.GET, "/api/v1/holds/**").authenticated()
                                                 // Read-only APIs remain open in M1
                                                 .requestMatchers(HttpMethod.GET, "/api/v1/**").permitAll()
                                                 // Swagger/OpenAPI/Actuator/error open
@@ -47,7 +49,13 @@ public class SecurityConfig {
                                                                 "/actuator/**",
                                                                 "/error")
                                                 .permitAll()
-                                                // Write operations require ORGANIZER or ADMIN
+                                                // Holds: attendees can create/release their holds
+                                                .requestMatchers(HttpMethod.POST, "/api/v1/holds/**")
+                                                .hasRole("ATTENDEE")
+                                                .requestMatchers(HttpMethod.DELETE, "/api/v1/holds/**")
+                                                .hasRole("ATTENDEE")
+                                                // Write operations require ORGANIZER or ADMIN (default for other
+                                                // resources)
                                                 .requestMatchers(HttpMethod.POST, "/api/v1/**")
                                                 .hasAnyRole("ORGANIZER", "ADMIN")
                                                 .requestMatchers(HttpMethod.PUT, "/api/v1/**")
