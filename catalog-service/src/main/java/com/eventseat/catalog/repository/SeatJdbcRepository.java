@@ -12,6 +12,10 @@ import java.sql.PreparedStatement;
 import java.sql.Statement;
 import java.util.List;
 import java.util.Optional;
+import java.util.Map;
+import java.util.HashMap;
+import java.util.ArrayList;
+import java.util.StringJoiner;
 
 @Repository
 public class SeatJdbcRepository {
@@ -126,5 +130,28 @@ public class SeatJdbcRepository {
         final String sql = "SELECT COUNT(1) FROM seats WHERE id=?";
         Integer count = jdbcTemplate.queryForObject(sql, Integer.class, id);
         return count != null && count > 0;
+    }
+
+    /**
+     * Returns a map of seatId -> status for seats that match the given eventId and
+     * ids.
+     * Any requested id not present in the result is either non-existent or does not
+     * belong to the eventId.
+     */
+    public Map<Long, String> findStatusesForEventAndIds(Long eventId, List<Long> seatIds) {
+        if (seatIds == null || seatIds.isEmpty())
+            return Map.of();
+        StringJoiner sj = new StringJoiner(",", "(", ")");
+        for (int i = 0; i < seatIds.size(); i++)
+            sj.add("?");
+        String sql = "SELECT id, status FROM seats WHERE event_id=? AND id IN " + sj;
+        List<Object> args = new ArrayList<>();
+        args.add(eventId);
+        args.addAll(seatIds);
+        Map<Long, String> out = new HashMap<>();
+        jdbcTemplate.query(sql, args.toArray(), rs -> {
+            out.put(rs.getLong("id"), rs.getString("status"));
+        });
+        return out;
     }
 }

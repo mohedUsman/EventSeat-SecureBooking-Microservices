@@ -64,6 +64,16 @@ public class GlobalExceptionHandler {
         return pd;
     }
 
+    @ExceptionHandler(HoldConflictException.class)
+    public ProblemDetail handleHoldConflict(HoldConflictException ex) {
+        ProblemDetail pd = ProblemDetail.forStatus(HttpStatus.CONFLICT);
+        pd.setTitle("Seat Hold Conflict");
+        pd.setType(URI.create("about:blank#hold-conflict"));
+        pd.setDetail(ex.getMessage());
+        pd.setProperty("seats", ex.getSeatDiagnostics());
+        return pd;
+    }
+
     @ExceptionHandler(Exception.class)
     public ProblemDetail handleGeneric(Exception ex) {
         ProblemDetail pd = ProblemDetail.forStatus(HttpStatus.INTERNAL_SERVER_ERROR);

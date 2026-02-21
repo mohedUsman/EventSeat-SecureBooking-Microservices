@@ -2,6 +2,8 @@ package com.eventseat.catalog.service;
 
 import com.eventseat.catalog.domain.HoldEntity;
 import com.eventseat.catalog.repository.HoldJdbcRepository;
+import com.eventseat.catalog.repository.SeatJdbcRepository;
+import com.eventseat.catalog.web.HoldConflictException;
 import com.eventseat.catalog.web.dto.HoldCreateRequest;
 import com.eventseat.catalog.web.dto.HoldResponse;
 import java.time.OffsetDateTime;
@@ -10,6 +12,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.stream.Collectors;
+import java.util.Map;
+import java.util.HashMap;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
@@ -24,9 +28,11 @@ public class HoldService {
     private static final int DEFAULT_TTL_MIN = 15;
 
     private final HoldJdbcRepository holdRepo;
+    private final SeatJdbcRepository seatRepo;
 
-    public HoldService(HoldJdbcRepository holdRepo) {
+    public HoldService(HoldJdbcRepository holdRepo, SeatJdbcRepository seatRepo) {
         this.holdRepo = holdRepo;
+        this.seatRepo = seatRepo;
     }
 
     @Transactional
@@ -49,8 +55,32 @@ public class HoldService {
         // Attempt to mark requested seats as HELD atomically (within tx)
         int updated = holdRepo.updateSeatsToHeld(req.getEventId(), req.getSeatIds());
         if (updated != req.getSeatIds().size()) {
-            // Not all seats were AVAILABLE - roll back by throwing
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "One or more seats are not AVAILABLE");
+            // Not all seats were AVAILABLE - build diagnostics and return informative 409
+            List<Long> ids = req.getSeatIds();
+            Map<Long, String> statuses = seatRepo.findStatusesForEventAndIds(req.getEventId(), ids);
+            Map<Long, Object> diag = new HashMap<>();
+            for (Long sid : ids) {
+                if (!statuses.containsKey(sid)) {
+                    Map<String, Object> m = new HashMap<>();
+                    m.put("reason", "not_found_or_wrong_event");
+                    diag.put(sid, m);
+                } else {
+                    String s = statuses.get(sid);
+                    if (!"AVAILABLE".equalsIgnoreCase(s)) {
+                        Map<String, Object> m = new HashMap<>();
+                        m.put("reason", "not_available");
+                        m.put("status", s);
+                        diag.put(sid, m);
+                    } else {
+                        // Very rare: still AVAILABLE but update failed (race between read and update)
+                        Map<String, Object> m = new HashMap<>();
+                        m.put("reason", "race_condition_or_retried");
+                        m.put("status", s);
+                        diag.put(sid, m);
+                    }
+                }
+            }
+            throw new HoldConflictException("One or more seats are not AVAILABLE", diag);
         }
 
         String seatIdsCsv = toCsv(req.getSeatIds());
