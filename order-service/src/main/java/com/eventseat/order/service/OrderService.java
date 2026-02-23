@@ -248,4 +248,45 @@ public class OrderService {
         }
         return false;
     }
+
+    @Transactional
+    public OrderResponse updateState(Long id, String state, Jwt jwt) {
+        // ADMIN only
+        if (!hasRole(jwt, "ADMIN")) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "admin_role_required");
+        }
+        if (state == null || state.isBlank()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "state_required");
+        }
+
+        OrderEntity.State target;
+        try {
+            target = OrderEntity.State.valueOf(state.trim().toUpperCase(Locale.ROOT));
+        } catch (IllegalArgumentException ex) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "invalid_state");
+        }
+
+        // Ensure order exists
+        OrderEntity existing = ordersRepo.findById(id)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Order not found"));
+
+        // Transition (no complex rules for PoC; used to satisfy attendance gating)
+        int updated = ordersRepo.updateState(id, target);
+        if (updated == 0) {
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Failed to update state");
+        }
+
+        OrderEntity after = ordersRepo.findById(id)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR,
+                        "Order not found after update"));
+
+        return toResponse(
+                after.getId(),
+                after.getAttendeeId(),
+                after.getEventId(),
+                splitCsv(after.getSeatIdsCsv()),
+                after.getAmount(),
+                after.getCurrency(),
+                after.getState());
+    }
 }

@@ -46,6 +46,7 @@ public class SecurityConfig {
                         // checked server-side)
                         .requestMatchers(HttpMethod.POST, "/api/v1/orders/**").hasRole("ATTENDEE")
                         .requestMatchers(HttpMethod.GET, "/api/v1/orders/**").authenticated()
+                        .requestMatchers(HttpMethod.PATCH, "/api/v1/orders/**").hasRole("ADMIN")
                         // Everything else authenticated
                         .anyRequest().authenticated())
                 .oauth2ResourceServer(oauth2 -> oauth2

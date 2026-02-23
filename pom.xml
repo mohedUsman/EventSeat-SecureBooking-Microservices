@@ -41,7 +41,7 @@ Modules:
         <module>identity-service</module>
         <module>catalog-service</module>
         <module>order-service</module>
-        <!--        <module>review-reporting-service</module>-->
+        <module>review-reporting-service</module>
     </modules>
 
     <dependencyManagement>

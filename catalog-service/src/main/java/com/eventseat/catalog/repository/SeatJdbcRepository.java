@@ -154,4 +154,32 @@ public class SeatJdbcRepository {
         });
         return out;
     }
+
+    public Long findIdByNaturalKey(Long eventId, String section, String rowLabel, String seatNumber) {
+        final String sql = "SELECT id FROM seats WHERE event_id=? AND " +
+                "COALESCE(section,'') = COALESCE(?, '') AND COALESCE(row_label,'') = COALESCE(?, '') AND COALESCE(seat_number,'') = COALESCE(?, '') LIMIT 1";
+        List<Long> ids = jdbcTemplate.query(sql, (rs, rn) -> rs.getLong("id"),
+                eventId, section, rowLabel, seatNumber);
+        return ids.isEmpty() ? null : ids.get(0);
+    }
+
+    public Long upsertByNaturalKey(Long eventId, String section, String rowLabel, String seatNumber,
+            java.math.BigDecimal basePrice, String currency) {
+        Long existingId = findIdByNaturalKey(eventId, section, rowLabel, seatNumber);
+        com.eventseat.catalog.web.dto.SeatDto dto = new com.eventseat.catalog.web.dto.SeatDto();
+        dto.setEventId(eventId);
+        dto.setSection(section);
+        dto.setRowLabel(rowLabel);
+        dto.setSeatNumber(seatNumber);
+        dto.setBasePrice(basePrice);
+        dto.setCurrency(currency);
+        dto.setStatus("AVAILABLE");
+        if (existingId == null) {
+            com.eventseat.catalog.web.dto.SeatDto saved = save(dto);
+            return saved.getId();
+        } else {
+            update(existingId, dto);
+            return existingId;
+        }
+    }
 }
