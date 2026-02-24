@@ -1,0 +1,232 @@
+{
+    "info": {
+        "name": "EventSeat - Operations (Import, Reporting, Admin)",
+        "_postman_id": "f3b4d3b0-5d1f-4a49-9a2a-eventseat-operations",
+        "description": "Organizer/Admin operational endpoints: Bulk Inventory Import (CSV/XLSX with idempotency), Reporting (nightly/monthly) guidance, and Admin publish. Use EventSeat-Local environment.",
+        "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+    },
+    "item": [
+        {
+            "name": "0 - README (Ops overview)",
+            "request": {
+                "method": "GET",
+                "description": "This collection covers:\n- Bulk Inventory Import (idempotent): uploads CSV/XLSX to create/update seats by natural key (eventId, section, rowLabel, seatNumber)\n- Reporting guidance: Nightly Sales Reconciliation logs; Monthly Event Statements CSV output\n- Admin publish for events\n\nEnvironment vars used: gatewayBaseUrl, catalogBaseUrl (optional direct), adminToken, organizerToken, eventId, importIdemKey.\n",
+                "url": {
+                    "raw": "http://localhost/README-only",
+                    "host": [
+                        "localhost"
+                    ],
+                    "path": [
+                        "README-only"
+                    ]
+                }
+            }
+        },
+        {
+            "name": "1 - Inventory Import (Gateway)",
+            "request": {
+                "method": "POST",
+                "header": [
+                    {
+                        "key": "Authorization",
+                        "value": "Bearer {{organizerToken}}"
+                    },
+                    {
+                        "key": "Idempotency-Key",
+                        "value": "{{importIdemKey}}"
+                    }
+                ],
+                "body": {
+                    "mode": "formdata",
+                    "formdata": [
+                        {
+                            "key": "eventId",
+                            "value": "{{eventId}}",
+                            "type": "text"
+                        },
+                        {
+                            "key": "file",
+                            "type": "file",
+                            "src": []
+                        }
+                    ]
+                },
+                "url": {
+                    "raw": "{{gatewayBaseUrl}}/api/catalog/inventory/import",
+                    "host": [
+                        "{{gatewayBaseUrl}}"
+                    ],
+                    "path": [
+                        "api",
+                        "catalog",
+                        "inventory",
+                        "import"
+                    ]
+                },
+                "description": "Uploads CSV/XLSX with columns: section,rowLabel,seatNumber,basePrice,currency.\n- Idempotent: same key+same content returns cached ImportReport; different content with same key → 409.\n- Sample file: docs/samples/inventory-sample.csv"
+            }
+        },
+        {
+            "name": "2 - Inventory Import (Direct to catalog-service, optional)",
+            "request": {
+                "method": "POST",
+                "header": [
+                    {
+                        "key": "Authorization",
+                        "value": "Bearer {{organizerToken}}"
+                    },
+                    {
+                        "key": "Idempotency-Key",
+                        "value": "{{importIdemKey}}"
+                    }
+                ],
+                "body": {
+                    "mode": "formdata",
+                    "formdata": [
+                        {
+                            "key": "eventId",
+                            "value": "{{eventId}}",
+                            "type": "text"
+                        },
+                        {
+                            "key": "file",
+                            "type": "file",
+                            "src": []
+                        }
+                    ]
+                },
+                "url": {
+                    "raw": "{{catalogBaseUrl}}/api/v1/inventory/import",
+                    "host": [
+                        "{{catalogBaseUrl}}"
+                    ],
+                    "path": [
+                        "api",
+                        "v1",
+                        "inventory",
+                        "import"
+                    ]
+                },
+                "description": "Direct call to catalog-service (bypasses Gateway). Typically not needed; Gateway is preferred."
+            }
+        },
+        {
+            "name": "3 - Admin: Publish Event (approval)",
+            "request": {
+                "method": "PATCH",
+                "header": [
+                    {
+                        "key": "Authorization",
+                        "value": "Bearer {{adminToken}}"
+                    }
+                ],
+                "url": {
+                    "raw": "{{gatewayBaseUrl}}/api/catalog/events/{{eventId}}/publish",
+                    "host": [
+                        "{{gatewayBaseUrl}}"
+                    ],
+                    "path": [
+                        "api",
+                        "catalog",
+                        "events",
+                        "{{eventId}}",
+                        "publish"
+                    ]
+                },
+                "description": "Approves and publishes an event in DRAFT. Returns 409 if not in DRAFT. Writes audit log."
+            }
+        },
+        {
+            "name": "3b - Orders: Set State (ADMIN)",
+            "request": {
+                "method": "PATCH",
+                "header": [
+                    {
+                        "key": "Authorization",
+                        "value": "Bearer {{adminToken}}"
+                    },
+                    {
+                        "key": "Content-Type",
+                        "value": "application/json"
+                    }
+                ],
+                "body": {
+                    "mode": "raw",
+                    "raw": "{\n  \"state\": \"COMPLETED\"\n}"
+                },
+                "url": {
+                    "raw": "{{gatewayBaseUrl}}/api/orders/orders/{{orderId}}/state",
+                    "host": [
+                        "{{gatewayBaseUrl}}"
+                    ],
+                    "path": [
+                        "api",
+                        "orders",
+                        "orders",
+                        "{{orderId}}",
+                        "state"
+                    ]
+                },
+                "description": "ADMIN-only. Set order state to CHECKED_IN or COMPLETED to satisfy review attendance gating."
+            }
+        },
+        {
+            "name": "4 - Reporting: Nightly Reconciliation (how to verify)",
+            "request": {
+                "method": "GET",
+                "description": "Nightly at 02:30 (configurable in order-service application.properties):\n- Compares SOLD seats vs aggregated ordered seats (CONFIRMED/COMPLETED) by event.\n- Check order-service logs for entries like [Reconcile] OK/MISMATCH.\n- To test now: temporarily set reporting.reconcile.cron to a near-future time and restart order-service.",
+                "url": {
+                    "raw": "http://localhost/README-only",
+                    "host": [
+                        "localhost"
+                    ],
+                    "path": [
+                        "README-only"
+                    ]
+                }
+            }
+        },
+        {
+            "name": "5 - Reporting: Monthly Event Statements (how to verify)",
+            "request": {
+                "method": "GET",
+                "description": "Monthly at 03:00 on 1st (configurable):\n- Exports CSV to docs/exports/event-statements-YYYY-MM.csv\n- Columns: event_id, orders_count, revenue\n- To test now: temporarily set reporting.monthly.cron to a near-future time and restart order-service.",
+                "url": {
+                    "raw": "http://localhost/README-only",
+                    "host": [
+                        "localhost"
+                    ],
+                    "path": [
+                        "README-only"
+                    ]
+                }
+            }
+        }
+    ],
+    "variable": [
+        {
+            "key": "gatewayBaseUrl",
+            "value": "http://localhost:8080"
+        },
+        {
+            "key": "catalogBaseUrl",
+            "value": "http://localhost:8082"
+        },
+        {
+            "key": "organizerToken",
+            "value": ""
+        },
+        {
+            "key": "adminToken",
+            "value": ""
+        },
+        {
+            "key": "eventId",
+            "value": ""
+        },
+        {
+            "key": "importIdemKey",
+            "value": "import-{{eventId}}-v1"
+        }
+    ]
+}

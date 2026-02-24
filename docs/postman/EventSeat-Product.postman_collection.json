@@ -1,19 +1,19 @@
 {
     "info": {
-        "name": "EventSeat - Local (Gateway + Services)",
-        "_postman_id": "b1e2e4ad-2f0a-4a2e-9b4b-evtseat-local",
-        "description": "Local Postman collection to exercise Identity, Catalog (incl. Holds, Admin publish), and Orders (Idempotent + Mock Payments). Uses local MySQL and locally running Spring Boot services only.",
+        "name": "EventSeat - Product (Gateway-first E2E)",
+        "_postman_id": "7a8a5b6a-1e20-4cc9-8d5a-eventseat-product",
+        "description": "Core product flows through API Gateway: Identity, Catalog (venues/events/search), Holds, Orders (idempotent), Reviews (public/attendee/admin). Uses EventSeat-Local environment.",
         "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
     },
     "item": [
         {
-            "name": "0 - Environment Setup Notes",
+            "name": "0 - Environment & Auth",
             "item": [
                 {
-                    "name": "README (how to run locally)",
+                    "name": "README (how to run & variables)",
                     "request": {
                         "method": "GET",
-                        "description": "How to run locally:\n1) Make sure MySQL is running with schema 'eventseat' and user root/root\n2) Start Eureka on 8761\n3) Start identity-service (default port in properties)\n4) Start catalog-service (default port in properties)\n5) Start order-service on 8083\n6) Start api-gateway on 8080\n\nUse this collection with the provided environment (EventSeat-Local.postman_environment.json). Set attendee/admin/organizer emails/passwords in env or the request bodies.\n",
+                        "description": "Use with docs/postman/EventSeat-Local.postman_environment.json.\nVariables expected:\n- gatewayBaseUrl, identityBaseUrl (opt), catalogBaseUrl (opt), orderBaseUrl (opt), reviewBaseUrl (opt)\n- attendeeToken, organizerToken, adminToken\n- venueId, eventId, holdId, orderId, reviewId\n- idemKey (orders), importIdemKey (inventory import)\n\nRun order of folders:\n1) 0 - Environment & Auth → Login(s)\n2) 1 - Organizer Setup → create venue/event, then Publish (admin)\n3) 2 - Search & Listing → discover event\n4) 3 - Holds → reserve seats\n5) 4 - Orders → idempotent checkout (prefer via Gateway)\n6) 5 - Reviews → attendee create, admin approve, public read",
                         "url": {
                             "raw": "http://localhost/README-only",
                             "host": [
@@ -23,19 +23,15 @@
                                 "README-only"
                             ]
                         }
-                    },
-                    "response": []
-                }
-            ]
-        },
-        {
-            "name": "1 - Identity (via Gateway)",
-            "description": "User registration and login. Login response contains accessToken (JWT) which this collection stores in environment variables for downstream requests.",
-            "item": [
+                    }
+                },
                 {
                     "name": "Register - ATTENDEE",
                     "request": {
                         "method": "POST",
+                        "auth": {
+                            "type": "noauth"
+                        },
                         "header": [
                             {
                                 "key": "Content-Type",
@@ -58,44 +54,16 @@
                                 "register"
                             ]
                         },
-                        "description": "Creates a new ATTENDEE user. Use strong password policy (e.g., at least 8 chars, mixed case, digit)."
-                    },
-                    "response": []
+                        "description": "Creates ATTENDEE user. Strong password recommended."
+                    }
                 },
                 {
-                    "name": "Register - ADMIN",
+                    "name": "Register - ORGANIZER",
                     "request": {
                         "method": "POST",
-                        "header": [
-                            {
-                                "key": "Content-Type",
-                                "value": "application/json"
-                            }
-                        ],
-                        "body": {
-                            "mode": "raw",
-                            "raw": "{\n  \"email\": \"admin@example.com\",\n  \"password\": \"Admin@123\",\n  \"rolesCsv\": \"ADMIN\"\n}"
+                        "auth": {
+                            "type": "noauth"
                         },
-                        "url": {
-                            "raw": "{{gatewayBaseUrl}}/api/identity/auth/register",
-                            "host": [
-                                "{{gatewayBaseUrl}}"
-                            ],
-                            "path": [
-                                "api",
-                                "identity",
-                                "auth",
-                                "register"
-                            ]
-                        },
-                        "description": "Creates an ADMIN user to approve event publishing and manage admin operations."
-                    },
-                    "response": []
-                },
-                {
-                    "name": "Register - ORGANIZER (optional)",
-                    "request": {
-                        "method": "POST",
                         "header": [
                             {
                                 "key": "Content-Type",
@@ -117,15 +85,47 @@
                                 "auth",
                                 "register"
                             ]
+                        }
+                    }
+                },
+                {
+                    "name": "Register - ADMIN",
+                    "request": {
+                        "method": "POST",
+                        "auth": {
+                            "type": "noauth"
                         },
-                        "description": "Creates an ORGANIZER to create events and manage inventory."
-                    },
-                    "response": []
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"email\": \"admin@example.com\",\n  \"password\": \"Admin@123\",\n  \"rolesCsv\": \"ADMIN\"\n}"
+                        },
+                        "url": {
+                            "raw": "{{gatewayBaseUrl}}/api/identity/auth/register",
+                            "host": [
+                                "{{gatewayBaseUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "identity",
+                                "auth",
+                                "register"
+                            ]
+                        }
+                    }
                 },
                 {
                     "name": "Login - ATTENDEE",
                     "request": {
                         "method": "POST",
+                        "auth": {
+                            "type": "noauth"
+                        },
                         "header": [
                             {
                                 "key": "Content-Type",
@@ -148,74 +148,27 @@
                                 "login"
                             ]
                         },
-                        "description": "Authenticates ATTENDEE and returns JWT.\nPurpose: Obtain Bearer token to access protected endpoints."
+                        "description": "Stores accessToken to {{attendeeToken}}"
                     },
                     "event": [
                         {
                             "listen": "test",
                             "script": {
+                                "type": "text/javascript",
                                 "exec": [
-                                    "try {",
-                                    "  const data = pm.response.json();",
-                                    "  pm.environment.set(\"attendeeToken\", data.accessToken);",
-                                    "  pm.test(\"Got ATTENDEE token\", function () { pm.expect(data.accessToken).to.be.a('string'); });",
-                                    "} catch (e) { /* ignore */ }"
-                                ],
-                                "type": "text/javascript"
+                                    "try { const data = pm.response.json(); pm.environment.set('attendeeToken', data.accessToken); pm.environment.set('attendeeUserId', data.userId); } catch(e) {}"
+                                ]
                             }
                         }
-                    ],
-                    "response": []
+                    ]
                 },
                 {
-                    "name": "Login - ADMIN",
+                    "name": "Login - ORGANIZER",
                     "request": {
                         "method": "POST",
-                        "header": [
-                            {
-                                "key": "Content-Type",
-                                "value": "application/json"
-                            }
-                        ],
-                        "body": {
-                            "mode": "raw",
-                            "raw": "{\n  \"email\": \"admin@example.com\",\n  \"password\": \"Admin@123\"\n}"
+                        "auth": {
+                            "type": "noauth"
                         },
-                        "url": {
-                            "raw": "{{gatewayBaseUrl}}/api/identity/auth/login",
-                            "host": [
-                                "{{gatewayBaseUrl}}"
-                            ],
-                            "path": [
-                                "api",
-                                "identity",
-                                "auth",
-                                "login"
-                            ]
-                        },
-                        "description": "Authenticates ADMIN and returns JWT.\nPurpose: Allow admin-only actions like publish event."
-                    },
-                    "event": [
-                        {
-                            "listen": "test",
-                            "script": {
-                                "exec": [
-                                    "try {",
-                                    "  const data = pm.response.json();",
-                                    "  pm.environment.set(\"adminToken\", data.accessToken);",
-                                    "  pm.test(\"Got ADMIN token\", function () { pm.expect(data.accessToken).to.be.a('string'); });",
-                                    "} catch (e) { /* ignore */ }"
-                                ],
-                                "type": "text/javascript"
-                            }
-                        }
-                    ],
-                    "response": []
-                },
-                {
-                    "name": "Login - ORGANIZER (optional)",
-                    "request": {
-                        "method": "POST",
                         "header": [
                             {
                                 "key": "Content-Type",
@@ -237,39 +190,131 @@
                                 "auth",
                                 "login"
                             ]
-                        },
-                        "description": "Authenticates ORGANIZER and returns JWT for event/inventory management."
+                        }
                     },
                     "event": [
                         {
                             "listen": "test",
                             "script": {
+                                "type": "text/javascript",
                                 "exec": [
-                                    "try {",
-                                    "  const data = pm.response.json();",
-                                    "  pm.environment.set(\"organizerToken\", data.accessToken);",
-                                    "  pm.test(\"Got ORGANIZER token\", function () { pm.expect(data.accessToken).to.be.a('string'); });",
-                                    "} catch (e) { /* ignore */ }"
-                                ],
-                                "type": "text/javascript"
+                                    "try { const data = pm.response.json(); pm.environment.set('organizerToken', data.accessToken); } catch(e) {}"
+                                ]
                             }
                         }
-                    ],
-                    "response": []
+                    ]
+                },
+                {
+                    "name": "Login - ADMIN",
+                    "request": {
+                        "method": "POST",
+                        "auth": {
+                            "type": "noauth"
+                        },
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"email\": \"admin@example.com\",\n  \"password\": \"Admin@123\"\n}"
+                        },
+                        "url": {
+                            "raw": "{{gatewayBaseUrl}}/api/identity/auth/login",
+                            "host": [
+                                "{{gatewayBaseUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "identity",
+                                "auth",
+                                "login"
+                            ]
+                        }
+                    },
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "try { const data = pm.response.json(); pm.environment.set('adminToken', data.accessToken); } catch(e) {}"
+                                ]
+                            }
+                        }
+                    ]
+                },
+                {
+                    "name": "PII Profile - Upsert (ATTENDEE)",
+                    "request": {
+                        "method": "PUT",
+                        "header": [
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{attendeeToken}}"
+                            },
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"name\": \"Alice Johnson\",\n  \"phone\": \"+1-512-555-7788\",\n  \"address\": \"742 Evergreen Terrace, Springfield, USA\"\n}"
+                        },
+                        "url": {
+                            "raw": "{{gatewayBaseUrl}}/api/identity/profile/me",
+                            "host": [
+                                "{{gatewayBaseUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "identity",
+                                "profile",
+                                "me"
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "PII Profile - Get (ATTENDEE)",
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{attendeeToken}}"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{gatewayBaseUrl}}/api/identity/profile/me",
+                            "host": [
+                                "{{gatewayBaseUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "identity",
+                                "profile",
+                                "me"
+                            ]
+                        }
+                    }
                 }
             ]
         },
         {
-            "name": "2 - Catalog (via Gateway)",
+            "name": "1 - Organizer Setup",
             "item": [
                 {
-                    "name": "Venues - Create (ADMIN or ORGANIZER)",
+                    "name": "Venues - Create",
                     "request": {
                         "method": "POST",
                         "header": [
                             {
                                 "key": "Authorization",
-                                "value": "Bearer {{adminToken}}"
+                                "value": "Bearer {{organizerToken}}"
                             },
                             {
                                 "key": "Content-Type",
@@ -290,27 +335,22 @@
                                 "catalog",
                                 "venues"
                             ]
-                        },
-                        "description": "Creates a venue. Useful to anchor events to a physical location/timezone."
+                        }
                     },
                     "event": [
                         {
                             "listen": "test",
                             "script": {
+                                "type": "text/javascript",
                                 "exec": [
-                                    "try {",
-                                    "  const data = pm.response.json();",
-                                    "  pm.environment.set(\"venueId\", data.id);",
-                                    "} catch (e) { /* ignore */ }"
-                                ],
-                                "type": "text/javascript"
+                                    "try { pm.environment.set('venueId', pm.response.json().id); } catch(e) {}"
+                                ]
                             }
                         }
-                    ],
-                    "response": []
+                    ]
                 },
                 {
-                    "name": "Events - Create (ORGANIZER) - DRAFT",
+                    "name": "Events - Create (DRAFT)",
                     "request": {
                         "method": "POST",
                         "header": [
@@ -337,24 +377,19 @@
                                 "catalog",
                                 "events"
                             ]
-                        },
-                        "description": "Creates an event in DRAFT state. Organizer ownership is enforced downstream."
+                        }
                     },
                     "event": [
                         {
                             "listen": "test",
                             "script": {
+                                "type": "text/javascript",
                                 "exec": [
-                                    "try {",
-                                    "  const data = pm.response.json();",
-                                    "  pm.environment.set(\"eventId\", data.id);",
-                                    "} catch (e) { /* ignore */ }"
-                                ],
-                                "type": "text/javascript"
+                                    "try { pm.environment.set('eventId', pm.response.json().id); } catch(e) {}"
+                                ]
                             }
                         }
-                    ],
-                    "response": []
+                    ]
                 },
                 {
                     "name": "Events - Publish (ADMIN approval)",
@@ -378,13 +413,16 @@
                                 "{{eventId}}",
                                 "publish"
                             ]
-                        },
-                        "description": "Approves and publishes an event previously in DRAFT. Writes an audit log entry."
-                    },
-                    "response": []
-                },
+                        }
+                    }
+                }
+            ]
+        },
+        {
+            "name": "2 - Search & Listing",
+            "item": [
                 {
-                    "name": "Events - Search (public read)",
+                    "name": "Events - Search (public)",
                     "request": {
                         "method": "GET",
                         "url": {
@@ -412,19 +450,22 @@
                                     "value": "Austin"
                                 }
                             ]
-                        },
-                        "description": "Search and listing with pagination/filters; includes available seats remaining summary."
-                    },
-                    "response": []
-                },
+                        }
+                    }
+                }
+            ]
+        },
+        {
+            "name": "2b - Seats (ADMIN/ORGANIZER)",
+            "item": [
                 {
-                    "name": "Seats - Create (ADMIN or ORGANIZER)",
+                    "name": "Seats - Create",
                     "request": {
                         "method": "POST",
                         "header": [
                             {
                                 "key": "Authorization",
-                                "value": "Bearer {{adminToken}}"
+                                "value": "Bearer {{organizerToken}}"
                             },
                             {
                                 "key": "Content-Type",
@@ -445,13 +486,149 @@
                                 "catalog",
                                 "seats"
                             ]
-                        },
-                        "description": "Creates a seat (inventory unit) for the event. Repeat to add more seats."
+                        }
                     },
-                    "response": []
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "try { const data = pm.response.json(); pm.environment.set('seatId', data.id); } catch(e) {}"
+                                ]
+                            }
+                        }
+                    ]
                 },
                 {
-                    "name": "Holds - Create (ATTENDEE)",
+                    "name": "Seats - Get by Id (public)",
+                    "request": {
+                        "method": "GET",
+                        "url": {
+                            "raw": "{{gatewayBaseUrl}}/api/catalog/seats/{{seatId}}",
+                            "host": [
+                                "{{gatewayBaseUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "catalog",
+                                "seats",
+                                "{{seatId}}"
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "Seats - List by Event (public)",
+                    "request": {
+                        "method": "GET",
+                        "url": {
+                            "raw": "{{gatewayBaseUrl}}/api/catalog/seats?eventId={{eventId}}&page=0&size=10",
+                            "host": [
+                                "{{gatewayBaseUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "catalog",
+                                "seats"
+                            ],
+                            "query": [
+                                {
+                                    "key": "eventId",
+                                    "value": "{{eventId}}"
+                                },
+                                {
+                                    "key": "page",
+                                    "value": "0"
+                                },
+                                {
+                                    "key": "size",
+                                    "value": "10"
+                                }
+                            ]
+                        }
+                    },
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "try {",
+                                    "  const data = pm.response.json();",
+                                    "  const items = (data && data.items) ? data.items : [];",
+                                    "  if (items.length > 0 && items[0].id) {",
+                                    "    pm.environment.set('seatId', items[0].id);",
+                                    "  }",
+                                    "} catch (e) { /* ignore */ }"
+                                ]
+                            }
+                        }
+                    ]
+                },
+                {
+                    "name": "Seats - Update (ADMIN/ORGANIZER)",
+                    "request": {
+                        "method": "PUT",
+                        "header": [
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{organizerToken}}"
+                            },
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"id\": {{seatId}},\n  \"eventId\": {{eventId}},\n  \"section\": \"A\",\n  \"rowLabel\": \"1\",\n  \"seatNumber\": \"1\",\n  \"basePrice\": 109.00,\n  \"currency\": \"USD\",\n  \"status\": \"AVAILABLE\"\n}"
+                        },
+                        "url": {
+                            "raw": "{{gatewayBaseUrl}}/api/catalog/seats/{{seatId}}",
+                            "host": [
+                                "{{gatewayBaseUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "catalog",
+                                "seats",
+                                "{{seatId}}"
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "Seats - Delete (ADMIN/ORGANIZER)",
+                    "request": {
+                        "method": "DELETE",
+                        "header": [
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{organizerToken}}"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{gatewayBaseUrl}}/api/catalog/seats/{{seatId}}",
+                            "host": [
+                                "{{gatewayBaseUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "catalog",
+                                "seats",
+                                "{{seatId}}"
+                            ]
+                        }
+                    }
+                }
+            ]
+        },
+        {
+            "name": "3 - Holds (ATTENDEE)",
+            "item": [
+                {
+                    "name": "Create Hold",
                     "request": {
                         "method": "POST",
                         "header": [
@@ -466,7 +643,7 @@
                         ],
                         "body": {
                             "mode": "raw",
-                            "raw": "{\n  \"attendeeId\": 1,\n  \"eventId\": {{eventId}},\n  \"seatIds\": [1,2],\n  \"ttlMinutes\": 10\n}"
+                            "raw": "{\n  \"attendeeId\": {{attendeeUserId}},\n  \"eventId\": {{eventId}},\n  \"seatIds\": [{{seatId}}],\n  \"ttlMinutes\": 10\n}"
                         },
                         "url": {
                             "raw": "{{gatewayBaseUrl}}/api/catalog/holds",
@@ -478,27 +655,22 @@
                                 "catalog",
                                 "holds"
                             ]
-                        },
-                        "description": "Places a temporary reservation (hold) on specified seats for a TTL (default 15 mins). Prevents double-selling under concurrency."
+                        }
                     },
                     "event": [
                         {
                             "listen": "test",
                             "script": {
+                                "type": "text/javascript",
                                 "exec": [
-                                    "try {",
-                                    "  const data = pm.response.json();",
-                                    "  pm.environment.set(\"holdId\", data.id);",
-                                    "} catch (e) { /* ignore */ }"
-                                ],
-                                "type": "text/javascript"
+                                    "try { pm.environment.set('holdId', pm.response.json().id); } catch(e) {}"
+                                ]
                             }
                         }
-                    ],
-                    "response": []
+                    ]
                 },
                 {
-                    "name": "Holds - Get (ATTENDEE or ADMIN)",
+                    "name": "Get Hold",
                     "request": {
                         "method": "GET",
                         "header": [
@@ -518,13 +690,11 @@
                                 "holds",
                                 "{{holdId}}"
                             ]
-                        },
-                        "description": "Fetches a hold by id. ATTENDEE (owner) or ADMIN only."
-                    },
-                    "response": []
+                        }
+                    }
                 },
                 {
-                    "name": "Holds - Release (ATTENDEE or ADMIN)",
+                    "name": "Release Hold",
                     "request": {
                         "method": "DELETE",
                         "header": [
@@ -544,19 +714,16 @@
                                 "holds",
                                 "{{holdId}}"
                             ]
-                        },
-                        "description": "Releases a hold early; scheduler will also auto-expire holds after TTL."
-                    },
-                    "response": []
+                        }
+                    }
                 }
             ]
         },
         {
-            "name": "3 - Orders (direct to service @8083)",
-            "description": "Idempotent checkout using mock payments. If simulate=decline or simulate=timeout is used, the order remains PENDING and seats remain HELD.",
+            "name": "4 - Orders (Gateway + Direct)",
             "item": [
                 {
-                    "name": "Create Order (idempotent) - success path",
+                    "name": "Create Order (Gateway, idempotent)",
                     "request": {
                         "method": "POST",
                         "header": [
@@ -566,7 +733,7 @@
                             },
                             {
                                 "key": "Idempotency-Key",
-                                "value": "{{idempotencyKeySuccess}}"
+                                "value": "{{idemKey}}"
                             },
                             {
                                 "key": "Content-Type",
@@ -575,151 +742,35 @@
                         ],
                         "body": {
                             "mode": "raw",
-                            "raw": "{\n  \"attendeeId\": 1,\n  \"eventId\": {{eventId}},\n  \"seatIds\": [1,2],\n  \"currency\": \"USD\",\n  \"holdId\": {{holdId}}\n}"
+                            "raw": "{\n  \"attendeeId\": {{attendeeUserId}},\n  \"eventId\": {{eventId}},\n  \"seatIds\": [{{seatId}}],\n  \"currency\": \"USD\",\n  \"holdId\": {{holdId}}\n}"
                         },
                         "url": {
-                            "raw": "{{orderBaseUrl}}/api/v1/orders",
+                            "raw": "{{gatewayBaseUrl}}/api/orders/orders",
                             "host": [
-                                "{{orderBaseUrl}}"
+                                "{{gatewayBaseUrl}}"
                             ],
                             "path": [
                                 "api",
-                                "v1",
+                                "orders",
                                 "orders"
                             ]
                         },
-                        "description": "Creates an order idempotently and confirms on mock payment success. Seats change HELD → SOLD; order PENDING → CONFIRMED."
+                        "description": "Gateway → order-service /api/v1/orders"
                     },
                     "event": [
                         {
                             "listen": "test",
                             "script": {
+                                "type": "text/javascript",
                                 "exec": [
-                                    "try {",
-                                    "  const data = pm.response.json();",
-                                    "  pm.environment.set(\"orderId\", data.id);",
-                                    "  pm.test(\"Order confirmed\", function () { pm.expect(data.state).to.eql('CONFIRMED'); });",
-                                    "} catch (e) { /* ignore */ }"
-                                ],
-                                "type": "text/javascript"
+                                    "try { const data = pm.response.json(); pm.environment.set('orderId', data.id); } catch(e) {}"
+                                ]
                             }
                         }
-                    ],
-                    "response": []
+                    ]
                 },
                 {
-                    "name": "Create Order (idempotent replay same key+body)",
-                    "request": {
-                        "method": "POST",
-                        "header": [
-                            {
-                                "key": "Authorization",
-                                "value": "Bearer {{attendeeToken}}"
-                            },
-                            {
-                                "key": "Idempotency-Key",
-                                "value": "{{idempotencyKeySuccess}}"
-                            },
-                            {
-                                "key": "Content-Type",
-                                "value": "application/json"
-                            }
-                        ],
-                        "body": {
-                            "mode": "raw",
-                            "raw": "{\n  \"attendeeId\": 1,\n  \"eventId\": {{eventId}},\n  \"seatIds\": [1,2],\n  \"currency\": \"USD\",\n  \"holdId\": {{holdId}}\n}"
-                        },
-                        "url": {
-                            "raw": "{{orderBaseUrl}}/api/v1/orders",
-                            "host": [
-                                "{{orderBaseUrl}}"
-                            ],
-                            "path": [
-                                "api",
-                                "v1",
-                                "orders"
-                            ]
-                        },
-                        "description": "Replays the same idempotent key and body. Returns the cached successful response."
-                    },
-                    "response": []
-                },
-                {
-                    "name": "Create Order (simulate=decline)",
-                    "request": {
-                        "method": "POST",
-                        "header": [
-                            {
-                                "key": "Authorization",
-                                "value": "Bearer {{attendeeToken}}"
-                            },
-                            {
-                                "key": "Idempotency-Key",
-                                "value": "KEY-DECLINE-1"
-                            },
-                            {
-                                "key": "Content-Type",
-                                "value": "application/json"
-                            }
-                        ],
-                        "body": {
-                            "mode": "raw",
-                            "raw": "{\n  \"attendeeId\": 1,\n  \"eventId\": {{eventId}},\n  \"seatIds\": [3,4],\n  \"currency\": \"USD\",\n  \"holdId\": 0,\n  \"simulate\": \"decline\"\n}"
-                        },
-                        "url": {
-                            "raw": "{{orderBaseUrl}}/api/v1/orders",
-                            "host": [
-                                "{{orderBaseUrl}}"
-                            ],
-                            "path": [
-                                "api",
-                                "v1",
-                                "orders"
-                            ]
-                        },
-                        "description": "Simulates payment decline. Useful to test failure branch and ensure idempotency behavior."
-                    },
-                    "response": []
-                },
-                {
-                    "name": "Create Order (simulate=timeout)",
-                    "request": {
-                        "method": "POST",
-                        "header": [
-                            {
-                                "key": "Authorization",
-                                "value": "Bearer {{attendeeToken}}"
-                            },
-                            {
-                                "key": "Idempotency-Key",
-                                "value": "KEY-TIMEOUT-1"
-                            },
-                            {
-                                "key": "Content-Type",
-                                "value": "application/json"
-                            }
-                        ],
-                        "body": {
-                            "mode": "raw",
-                            "raw": "{\n  \"attendeeId\": 1,\n  \"eventId\": {{eventId}},\n  \"seatIds\": [5,6],\n  \"currency\": \"USD\",\n  \"holdId\": 0,\n  \"simulate\": \"timeout\"\n}"
-                        },
-                        "url": {
-                            "raw": "{{orderBaseUrl}}/api/v1/orders",
-                            "host": [
-                                "{{orderBaseUrl}}"
-                            ],
-                            "path": [
-                                "api",
-                                "v1",
-                                "orders"
-                            ]
-                        },
-                        "description": "Simulates payment timeout. Useful to test retry strategies and user messaging."
-                    },
-                    "response": []
-                },
-                {
-                    "name": "Get Order by Id (owner or ADMIN)",
+                    "name": "Get Order (Gateway)",
                     "request": {
                         "method": "GET",
                         "header": [
@@ -729,20 +780,192 @@
                             }
                         ],
                         "url": {
-                            "raw": "{{orderBaseUrl}}/api/v1/orders/{{orderId}}",
+                            "raw": "{{gatewayBaseUrl}}/api/orders/orders/{{orderId}}",
+                            "host": [
+                                "{{gatewayBaseUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "orders",
+                                "orders",
+                                "{{orderId}}"
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "Create Order (Direct @8083, optional)",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{attendeeToken}}"
+                            },
+                            {
+                                "key": "Idempotency-Key",
+                                "value": "{{idemKey}}"
+                            },
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"attendeeId\": {{attendeeUserId}},\n  \"eventId\": {{eventId}},\n  \"seatIds\": [{{seatId}}],\n  \"currency\": \"USD\",\n  \"holdId\": {{holdId}}\n}"
+                        },
+                        "url": {
+                            "raw": "{{orderBaseUrl}}/api/v1/orders",
                             "host": [
                                 "{{orderBaseUrl}}"
                             ],
                             "path": [
                                 "api",
                                 "v1",
+                                "orders"
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "Orders - Set State (ADMIN)",
+                    "request": {
+                        "method": "PATCH",
+                        "header": [
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{adminToken}}"
+                            },
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"state\": \"COMPLETED\"\n}"
+                        },
+                        "url": {
+                            "raw": "{{gatewayBaseUrl}}/api/orders/orders/{{orderId}}/state",
+                            "host": [
+                                "{{gatewayBaseUrl}}"
+                            ],
+                            "path": [
+                                "api",
                                 "orders",
-                                "{{orderId}}"
+                                "orders",
+                                "{{orderId}}",
+                                "state"
                             ]
                         },
-                        "description": "Reads order details. Useful for verifying final state and amounts."
-                    },
-                    "response": []
+                        "description": "ADMIN-only. Set order state to CHECKED_IN or COMPLETED to satisfy review attendance gating."
+                    }
+                }
+            ]
+        },
+        {
+            "name": "5 - Reviews",
+            "item": [
+                {
+                    "name": "Get Event Reviews (public)",
+                    "request": {
+                        "method": "GET",
+                        "url": {
+                            "raw": "{{gatewayBaseUrl}}/api/reviews/events/{{eventId}}/reviews",
+                            "host": [
+                                "{{gatewayBaseUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "reviews",
+                                "events",
+                                "{{eventId}}",
+                                "reviews"
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "Create Review (ATTENDEE, attendance-gated)",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{attendeeToken}}"
+                            },
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"eventId\": {{eventId}},\n  \"orderId\": {{orderId}},\n  \"rating\": 5,\n  \"text\": \"Fantastic event; well organized!\"\n}"
+                        },
+                        "url": {
+                            "raw": "{{gatewayBaseUrl}}/api/reviews/reviews",
+                            "host": [
+                                "{{gatewayBaseUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "reviews",
+                                "reviews"
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "Approve Review (ADMIN)",
+                    "request": {
+                        "method": "PATCH",
+                        "header": [
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{adminToken}}"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{gatewayBaseUrl}}/api/reviews/reviews/{{reviewId}}/approve",
+                            "host": [
+                                "{{gatewayBaseUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "reviews",
+                                "reviews",
+                                "{{reviewId}}",
+                                "approve"
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "Reject Review (ADMIN)",
+                    "request": {
+                        "method": "PATCH",
+                        "header": [
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{adminToken}}"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{gatewayBaseUrl}}/api/reviews/reviews/{{reviewId}}/reject",
+                            "host": [
+                                "{{gatewayBaseUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "reviews",
+                                "reviews",
+                                "{{reviewId}}",
+                                "reject"
+                            ]
+                        }
+                    }
                 }
             ]
         }
