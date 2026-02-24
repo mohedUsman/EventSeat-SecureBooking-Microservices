@@ -1,8 +1,24 @@
-%% Mermaid ER diagram for EventSeat (Milestone 1 scope)
-%% Save as eventseat-er.mmd. If you have Mermaid CLI installed, you can render:
+%% Mermaid ER diagram for EventSeat (Updated scope)
+%% Render with Mermaid CLI (optional):
 %% mmdc -i docs/er/eventseat-er.mmd -o docs/er/eventseat-er.png
 
 erDiagram
+  USERS {
+    BIGINT id PK
+    VARCHAR email UNIQUE
+    VARCHAR password_hash
+    VARCHAR roles        %% e.g., ATTENDEE,ORGANIZER,ADMIN
+    VARCHAR status       %% ACTIVE/LOCKED/etc.
+  }
+
+  ATTENDEE_PROFILES {
+    BIGINT id PK
+    BIGINT user_id FK UNIQUE
+    VARCHAR name
+    VARCHAR phone
+    VARCHAR address_encrypted  %% AES-GCM at rest
+  }
+
   VENUES {
     BIGINT id PK
     VARCHAR name
@@ -13,13 +29,13 @@ erDiagram
 
   EVENTS {
     BIGINT id PK
-    BIGINT organizer_id
+    BIGINT organizer_id FK   %% references USERS (role=ORGANIZER)
     BIGINT venue_id FK
     VARCHAR title
     VARCHAR category
     TIMESTAMP start_date_time
     TIMESTAMP end_date_time
-    VARCHAR status
+    VARCHAR status           %% DRAFT | PUBLISHED | CANCELLED
   }
 
   SEATS {
@@ -30,15 +46,100 @@ erDiagram
     VARCHAR seat_number
     DECIMAL base_price
     CHAR(3) currency
-    VARCHAR status
+    VARCHAR status           %% AVAILABLE | HELD | SOLD
+  }
+
+  HOLDS {
+    BIGINT id PK
+    BIGINT attendee_id FK
+    BIGINT event_id FK
+    VARCHAR seat_ids_csv     %% comma-separated seat ids for this hold
+    TIMESTAMP expires_at
+    VARCHAR status           %% ACTIVE | EXPIRED | RELEASED
+    TIMESTAMP created_at
+  }
+
+  ORDERS {
+    BIGINT id PK
+    BIGINT attendee_id FK
+    BIGINT event_id FK
+    DECIMAL amount
+    CHAR(3) currency
+    VARCHAR seat_ids_csv     %% seats captured in this order
+    VARCHAR state            %% PENDING | CONFIRMED | CHECKED_IN | COMPLETED | CANCELLED
+    TIMESTAMP created_at
+    TIMESTAMP updated_at
+  }
+
+  PAYMENT_ATTEMPTS {
+    BIGINT id PK
+    BIGINT order_id FK
+    VARCHAR type             %% AUTHORIZE | CAPTURE
+    VARCHAR status           %% SUCCESS | DECLINED | TIMEOUT
+    VARCHAR failure_reason
+    TIMESTAMP created_at
+  }
+
+  IDEMPOTENCY_KEYS {
+    BIGINT id PK
+    VARCHAR idem_key UNIQUE  %% Idempotency-Key header value
+    VARCHAR request_hash
+    BIGINT order_id          %% set once order created
+    TEXT response_json
+    TIMESTAMP created_at
+    TIMESTAMP updated_at
+  }
+
+  IDEMPOTENT_IMPORTS {
+    BIGINT id PK
+    VARCHAR idem_key UNIQUE  %% Idempotency-Key for import
+    VARCHAR checksum         %% content hash to detect payload change
+    TEXT response_json       %% last ImportReport JSON
+    TIMESTAMP created_at
+    TIMESTAMP updated_at
+  }
+
+  REVIEWS {
+    BIGINT id PK
+    BIGINT attendee_id FK
+    BIGINT event_id FK
+    INT rating              %% 1..5
+    TEXT text
+    VARCHAR status          %% PENDING | APPROVED | REJECTED
+    TIMESTAMP created_at
+  }
+
+  AUDIT_LOGS {
+    BIGINT id PK
+    VARCHAR action          %% e.g., EVENT_PUBLISH_APPROVED, IMPORT_RUN
+    VARCHAR entity_type     %% e.g., EVENT, SEAT, IMPORT
+    BIGINT entity_id
+    BIGINT actor_user_id FK
+    TEXT details
+    TIMESTAMP created_at
   }
 
   %% Relationships
-  VENUES ||--o{ EVENTS : "has many events at"
-  EVENTS ||--o{ SEATS : "has many seats for"
+  USERS ||--o{ ATTENDEE_PROFILES : "has attendee profile"
+  USERS ||--o{ EVENTS : "organizes"
+  VENUES ||--o{ EVENTS : "hosts"
+  EVENTS ||--o{ SEATS : "has"
+  USERS ||--o{ HOLDS : "places"
+  EVENTS ||--o{ HOLDS : "for event"
+  USERS ||--o{ ORDERS : "creates"
+  EVENTS ||--o{ ORDERS : "for event"
+  ORDERS ||--o{ PAYMENT_ATTEMPTS : "has"
+  USERS ||--o{ REVIEWS : "writes"
+  EVENTS ||--o{ REVIEWS : "receives"
+  USERS ||--o{ AUDIT_LOGS : "acts"
+  EVENTS ||--o{ AUDIT_LOGS : "audited (sample)"
 
   %% Notes:
-  %% - organizer_id in EVENTS is a foreign key to users/organizers domain (not modeled in M1 tables)
-  %% - status fields:
-  %%   EVENTS.status: DRAFT | PUBLISHED | CANCELLED
-  %%   SEATS.status: AVAILABLE | HELD | SOLD
+  %% - organizer_id in EVENTS references USERS (with ORGANIZER role).
+  %% - HOLDS and ORDERS capture seat_ids_csv for simplicity in this PoC. In a fuller model,
+  %%   HOLD_ITEMS / ORDER_ITEMS could normalize many-to-many seat selection.
+  %% - Idempotency:
+  %%   * IDEMPOTENCY_KEYS (order-service): protects Create Order.
+  %%   * IDEMPOTENT_IMPORTS (catalog-service): protects inventory imports.
+  %% - Review gating: review-service enforces that the caller's Order for event is CHECKED_IN or COMPLETED.
+  %% - PII: ATTENDEE_PROFILES fields are encrypted/masked via converters/logging policy in code.
